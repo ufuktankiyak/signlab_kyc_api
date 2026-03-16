@@ -1,6 +1,19 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:15
+    container_name: signlab_postgres
+    environment:
+      POSTGRES_USER: signlab
+      POSTGRES_PASSWORD: signlab123
+      POSTGRES_DB: signlab_kyc
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
   api:
     build: .
     container_name: signlab_kyc_api
@@ -10,4 +23,9 @@ services:
       - .env
     volumes:
       - .:/app
+    depends_on:
+      - db
     restart: unless-stopped
+
+volumes:
+  postgres_data:

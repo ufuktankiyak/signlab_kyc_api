@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": ["app.main:app", "--port", "8000"],
+            "jinja": true,
+            "cwd": "/Users/ufuktankiyak/signlab/signlab_kyc_api",
+            "justMyCode": true,
+            "env": {
+                "SECRET_KEY": "supersecretkey123456789abcdef0123456789abcdef",
+                "DATABASE_URL": "postgresql://signlab:signlab123@localhost:5433/signlab_kyc",
+                "PYTHONPATH": "/Users/ufuktankiyak/signlab/signlab_kyc_api"
+            }
+        }
+    ]
+}
