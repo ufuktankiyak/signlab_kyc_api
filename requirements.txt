@@ -5,3 +5,8 @@ pydantic-settings
 pydantic[email]
 sqlalchemy
 psycopg2-binary
+python-multipart
+paddlepaddle
+paddleocr
+opencv-python-headless
+numpy
