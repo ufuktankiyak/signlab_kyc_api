@@ -4,6 +4,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
 from app.models.user import User
+import app.models.kyc  # noqa: F401 — registers KYC models with SQLAlchemy metadata
 
 settings = get_settings()
 

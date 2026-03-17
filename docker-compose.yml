@@ -21,11 +21,15 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      STORAGE_PATH: /app/storage
     volumes:
       - .:/app
+      - kyc_storage:/app/storage
     depends_on:
       - db
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  kyc_storage:

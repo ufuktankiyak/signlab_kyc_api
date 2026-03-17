@@ -25,9 +25,11 @@ async def extract_document_info(
 
     image_bytes = await file.read()
 
-    data = extract_document(image_bytes, file.content_type, document_type)
+    # turkish_id is the legacy alias for new_id
+    doc_type_key = "new_id" if document_type.value == "turkish_id" else document_type.value
+    extracted, _ = extract_document(image_bytes, doc_type_key)
 
-    return DocumentExtractionResponse(document_type=document_type, data=data)
+    return DocumentExtractionResponse(document_type=document_type, data=extracted)
 
 
 @router.post("/debug-ocr")

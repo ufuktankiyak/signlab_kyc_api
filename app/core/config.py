@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # DATABASE
     DATABASE_URL: str
 
+    # STORAGE
+    STORAGE_PATH: str = "/app/storage"
 
     class Config:
         env_file = ".env"
