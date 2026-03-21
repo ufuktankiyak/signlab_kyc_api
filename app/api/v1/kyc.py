@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.core.request_context import user_id_var, tx_id_var, client_ip_var
 from app.db.session import get_db
@@ -18,6 +20,7 @@ from app.services.mrz_service import parse_mrz
 from app.services.liveness_service import check_liveness
 
 router = APIRouter()
+_settings = get_settings()
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/mpeg"}
@@ -26,7 +29,9 @@ ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/x-ms
 # ─── 1. Start ─────────────────────────────────────────────────────────────────
 
 @router.post("/start", response_model=KycStartResponse, summary="Start KYC session")
+@limiter.limit(_settings.RATE_LIMIT_DEFAULT)
 def start_kyc(
+    request: Request,
     body: KycStartRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -54,7 +59,9 @@ def start_kyc(
 # ─── 2. OCR ───────────────────────────────────────────────────────────────────
 
 @router.post("/{tx_id}/ocr", response_model=OcrResponse, summary="Document OCR")
+@limiter.limit(_settings.RATE_LIMIT_OCR)
 async def document_ocr(
+    request: Request,
     tx_id: str,
     file: UploadFile = File(...),
     side: str = Form("front"),
@@ -77,6 +84,12 @@ async def document_ocr(
 
     tx = kyc_service.get_transaction(db, tx_id)
     image_bytes = await file.read()
+
+    if len(image_bytes) > _settings.MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large. Max: {_settings.MAX_IMAGE_SIZE // (1024 * 1024)} MB.",
+        )
 
     # Extract data
     try:
@@ -115,7 +128,9 @@ async def document_ocr(
 # ─── 3. NFC / MRZ ─────────────────────────────────────────────────────────────
 
 @router.post("/{tx_id}/nfc", response_model=NfcResponse, summary="NFC / MRZ data")
+@limiter.limit(_settings.RATE_LIMIT_DEFAULT)
 def submit_nfc(
+    request: Request,
     tx_id: str,
     body: NfcRequest,
     db: Session = Depends(get_db),
@@ -148,7 +163,9 @@ def submit_nfc(
 # ─── 4. Liveness ──────────────────────────────────────────────────────────────
 
 @router.post("/{tx_id}/liveness", response_model=LivenessResponse, summary="Liveness check")
+@limiter.limit(_settings.RATE_LIMIT_OCR)
 async def liveness_check(
+    request: Request,
     tx_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -170,6 +187,12 @@ async def liveness_check(
 
     kyc_service.get_transaction(db, tx_id)
     video_bytes = await file.read()
+
+    if len(video_bytes) > _settings.MAX_VIDEO_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Video too large. Max: {_settings.MAX_VIDEO_SIZE // (1024 * 1024)} MB.",
+        )
 
     result = check_liveness(video_bytes)
 
@@ -195,7 +218,9 @@ async def liveness_check(
 # ─── Status ───────────────────────────────────────────────────────────────────
 
 @router.get("/{tx_id}/status", response_model=KycStatusResponse, summary="Transaction status")
+@limiter.limit(_settings.RATE_LIMIT_DEFAULT)
 def transaction_status(
+    request: Request,
     tx_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

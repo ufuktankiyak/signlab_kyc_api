@@ -1,9 +1,14 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging import setup_logging
+from app.core.rate_limit import limiter
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.middleware.logging_middleware import RequestLoggingMiddleware
@@ -25,6 +30,10 @@ app = FastAPI(
     version=settings.APP_VERSION,
     debug=settings.DEBUG
 )
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(api_router, prefix="/api/v1")
