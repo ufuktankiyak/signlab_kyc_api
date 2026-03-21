@@ -1,8 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user
 from app.db.session import get_db
 from app.models.user import User
@@ -11,10 +13,12 @@ from app.services import audit_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_settings = get_settings()
 
 
 @router.post("/register", response_model=UserResponse, status_code=201, summary="Register a new user")
-def register(body: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit(_settings.RATE_LIMIT_AUTH)
+def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(
@@ -37,7 +41,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse, summary="Login and get access token")
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit(_settings.RATE_LIMIT_AUTH)
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash):
         audit_service.log_event(

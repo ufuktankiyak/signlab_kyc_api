@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     ELASTICSEARCH_INDEX: str = "signlab-business-logs"
     ELASTICSEARCH_ENABLED: bool = False
 
+    # RATE LIMITING
+    RATE_LIMIT_AUTH: str = "5/minute"
+    RATE_LIMIT_OCR: str = "10/minute"
+    RATE_LIMIT_DEFAULT: str = "60/minute"
+
+    # FILE SIZE LIMITS (bytes)
+    MAX_IMAGE_SIZE: int = 10 * 1024 * 1024    # 10 MB
+    MAX_VIDEO_SIZE: int = 50 * 1024 * 1024    # 50 MB
+
     # STORAGE
     STORAGE_PATH: str = "/app/storage"
 
