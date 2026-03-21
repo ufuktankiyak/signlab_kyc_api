@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
 from app.models.user import User
@@ -22,8 +23,12 @@ def startup():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.id == 123).first():
-            db.add(User(id=123, email="ufuktankiyak@gmail.com"))
+        if not db.query(User).filter(User.email == "admin@signlab.com").first():
+            db.add(User(
+                email="admin@signlab.com",
+                password_hash=hash_password("changeme123"),
+                role="admin",
+            ))
             db.commit()
     finally:
         db.close()

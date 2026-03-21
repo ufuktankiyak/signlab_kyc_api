@@ -12,7 +12,7 @@
             "justMyCode": true,
             "env": {
                 "SECRET_KEY": "supersecretkey123456789abcdef0123456789abcdef",
-                "DATABASE_URL": "postgresql://signlab:signlab123@localhost:5433/signlab_kyc",
+                "DATABASE_URL": "postgresql://signlab:signlab123@127.0.0.1:5433/signlab_kyc",
                 "PYTHONPATH": "/Users/ufuktankiyak/signlab/signlab_kyc_api"
             }
         }

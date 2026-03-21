@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.kyc import (
     KycStartRequest, KycStartResponse,
     OcrResponse,
@@ -23,7 +25,11 @@ ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/x-ms
 # ─── 1. Start ─────────────────────────────────────────────────────────────────
 
 @router.post("/start", response_model=KycStartResponse, summary="Start KYC session")
-def start_kyc(body: KycStartRequest, db: Session = Depends(get_db)):
+def start_kyc(
+    body: KycStartRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Starts a new KYC transaction and returns a unique **tx_id**.
     Pass this tx_id to all subsequent steps.
@@ -46,6 +52,7 @@ async def document_ocr(
     file: UploadFile = File(...),
     side: str = Form("front"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload a document image (front or back). Runs OCR and extracts structured data.
@@ -93,7 +100,12 @@ async def document_ocr(
 # ─── 3. NFC / MRZ ─────────────────────────────────────────────────────────────
 
 @router.post("/{tx_id}/nfc", response_model=NfcResponse, summary="NFC / MRZ data")
-def submit_nfc(tx_id: str, body: NfcRequest, db: Session = Depends(get_db)):
+def submit_nfc(
+    tx_id: str,
+    body: NfcRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Submit MRZ lines read from NFC chip or document scan.
     Supports TD3 (passport, 2×44) and TD1 (ID card, 3×30).
@@ -121,6 +133,7 @@ async def liveness_check(
     tx_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload a video for liveness check (mp4, webm, mov).
@@ -160,7 +173,11 @@ async def liveness_check(
 # ─── Status ───────────────────────────────────────────────────────────────────
 
 @router.get("/{tx_id}/status", response_model=KycStatusResponse, summary="Transaction status")
-def transaction_status(tx_id: str, db: Session = Depends(get_db)):
+def transaction_status(
+    tx_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Returns the current status and completed steps of a KYC transaction."""
     tx = kyc_service.get_transaction(db, tx_id)
     return KycStatusResponse(

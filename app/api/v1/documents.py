@@ -1,4 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from app.core.security import get_current_user
+from app.models.user import User
 from app.schemas.document import DocumentType, DocumentExtractionResponse
 from app.services.document_service import extract_document, preprocess_image, run_ocr
 
@@ -16,6 +18,7 @@ ALLOWED_CONTENT_TYPES = {
 async def extract_document_info(
     file: UploadFile = File(...),
     document_type: DocumentType = Form(DocumentType.turkish_id),
+    current_user: User = Depends(get_current_user),
 ):
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -33,7 +36,10 @@ async def extract_document_info(
 
 
 @router.post("/debug-ocr")
-async def debug_ocr(file: UploadFile = File(...)):
+async def debug_ocr(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
     """Returns the raw OCR output — used for tuning regex patterns."""
     image_bytes = await file.read()
     img = preprocess_image(image_bytes)
