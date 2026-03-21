@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -5,7 +7,9 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse
+from app.services import audit_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -21,6 +25,14 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    audit_service.log_event(
+        db, "auth.register",
+        actor_id=user.id,
+        actor_email=user.email,
+        resource_type="user",
+        resource_id=str(user.id),
+    )
     return user
 
 
@@ -28,13 +40,33 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash):
+        audit_service.log_event(
+            db, "auth.login_failed",
+            actor_email=body.email,
+            detail={"reason": "invalid_credentials"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
     if not user.is_active:
+        audit_service.log_event(
+            db, "auth.login_failed",
+            actor_id=user.id,
+            actor_email=user.email,
+            detail={"reason": "account_deactivated"},
+        )
         raise HTTPException(status_code=403, detail="Account is deactivated")
+
     token = create_access_token(user.id, user.role)
+
+    audit_service.log_event(
+        db, "auth.login",
+        actor_id=user.id,
+        actor_email=user.email,
+        resource_type="user",
+        resource_id=str(user.id),
+    )
     return TokenResponse(access_token=token)
 
 

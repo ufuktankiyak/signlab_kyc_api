@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # DATABASE
     DATABASE_URL: str
 
+    # LOGGING
+    LOG_LEVEL: str = "INFO"
+
     # STORAGE
     STORAGE_PATH: str = "/app/storage"
 

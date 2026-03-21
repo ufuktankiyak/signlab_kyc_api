@@ -34,7 +34,7 @@ def start_kyc(
     Starts a new KYC transaction and returns a unique **tx_id**.
     Pass this tx_id to all subsequent steps.
     """
-    tx = kyc_service.create_transaction(db, body.document_type.value, body.client_reference)
+    tx = kyc_service.create_transaction(db, body.document_type.value, body.client_reference, actor_id=current_user.id)
     return KycStartResponse(
         tx_id=tx.id,
         status=tx.status,
@@ -86,6 +86,7 @@ async def document_ocr(
         file_path=file_path,
         raw_ocr=raw_ocr,
         extracted_data=extracted_data,
+        actor_id=current_user.id,
     )
 
     return OcrResponse(
@@ -121,6 +122,7 @@ def submit_nfc(
         mrz_line2=body.mrz_line2,
         mrz_line3=body.mrz_line3,
         parsed_data=parsed,
+        actor_id=current_user.id,
     )
 
     return NfcResponse(tx_id=tx_id, parsed_data=parsed)
@@ -158,7 +160,7 @@ async def liveness_check(
         data=video_bytes,
     )
 
-    kyc_service.save_liveness(db=db, tx_id=tx_id, file_path=file_path, result=result)
+    kyc_service.save_liveness(db=db, tx_id=tx_id, file_path=file_path, result=result, actor_id=current_user.id)
 
     return LivenessResponse(
         tx_id=tx_id,
