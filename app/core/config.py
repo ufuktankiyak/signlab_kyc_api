@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # LOGGING
     LOG_LEVEL: str = "INFO"
 
+    # ELASTICSEARCH (business logs)
+    ELASTICSEARCH_URL: str = "http://127.0.0.1:9200"
+    ELASTICSEARCH_INDEX: str = "signlab-business-logs"
+    ELASTICSEARCH_ENABLED: bool = False
+
     # STORAGE
     STORAGE_PATH: str = "/app/storage"
 

@@ -10,10 +10,16 @@ For each frame:
 Result: "passed" | "review" | "failed"
 """
 
+import logging
+import time
 import cv2
 import numpy as np
 import tempfile
 import os
+
+from app.core.request_context import get_log_context
+
+biz_logger = logging.getLogger("signlab.liveness")
 
 _FACE_CASCADE = None
 SAMPLE_FRAMES = 10   # how many frames to analyze from the video
@@ -47,6 +53,7 @@ def _analyze_frame(frame: np.ndarray) -> dict | None:
 
 
 def check_liveness(video_bytes: bytes) -> dict:
+    start = time.time()
     # Write video to a temporary file (OpenCV requires a file path)
     suffix = ".mp4"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -57,6 +64,9 @@ def check_liveness(video_bytes: bytes) -> dict:
 
         cap = cv2.VideoCapture(tmp.name)
         if not cap.isOpened():
+            biz_logger.error("Liveness failed: could not open video", extra={
+                **get_log_context(), "step": "liveness", "error": "could_not_open_video",
+            })
             return {
                 "face_detected": False,
                 "liveness_score": 0.0,
@@ -66,6 +76,9 @@ def check_liveness(video_bytes: bytes) -> dict:
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames <= 0:
+            biz_logger.error("Liveness failed: empty video", extra={
+                **get_log_context(), "step": "liveness", "error": "empty_video",
+            })
             return {
                 "face_detected": False,
                 "liveness_score": 0.0,
@@ -92,6 +105,12 @@ def check_liveness(video_bytes: bytes) -> dict:
         os.unlink(tmp.name)
 
     if not frame_results:
+        biz_logger.warning("Liveness: no face detected in any frame", extra={
+            **get_log_context(),
+            "step": "liveness",
+            "frames_analyzed": sample_count,
+            "frames_with_face": 0,
+        })
         return {
             "face_detected": False,
             "liveness_score": 0.0,
@@ -102,12 +121,11 @@ def check_liveness(video_bytes: bytes) -> dict:
     # Average the results across all frames
     face_ratio_avg = sum(r["face_ratio"] for r in frame_results) / len(frame_results)
     blur_avg = sum(r["blur_score"] for r in frame_results) / len(frame_results)
-    face_presence_ratio = len(frame_results) / sample_count  # ratio of frames in which a face was present
+    face_presence_ratio = len(frame_results) / sample_count
 
     face_ratio_score = min(1.0, face_ratio_avg / 0.10)
     blur_normalized = min(1.0, blur_avg / 150.0)
 
-    # Consistent face presence across multiple frames is an indicator of liveness
     score = round(
         0.4 * face_ratio_score +
         0.3 * blur_normalized +
@@ -121,6 +139,23 @@ def check_liveness(video_bytes: bytes) -> dict:
         result = "review"
     else:
         result = "failed"
+
+    duration_ms = round((time.time() - start) * 1000, 2)
+    biz_logger.info(
+        "Liveness check completed",
+        extra={
+            **get_log_context(),
+            "step": "liveness",
+            "result": result,
+            "liveness_score": score,
+            "frames_analyzed": sample_count,
+            "frames_with_face": len(frame_results),
+            "face_presence_ratio": round(face_presence_ratio, 2),
+            "avg_face_ratio": round(face_ratio_avg, 4),
+            "avg_blur_score": round(blur_avg, 2),
+            "duration_ms": duration_ms,
+        },
+    )
 
     return {
         "face_detected": True,

@@ -16,3 +16,4 @@ passlib[bcrypt]
 bcrypt==4.0.1
 alembic
 python-json-logger
+elasticsearch>=8.0,<9.0

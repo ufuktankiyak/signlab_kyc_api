@@ -9,9 +9,11 @@ class KycTransaction(Base):
     __tablename__ = "kyc_transactions"
 
     id = Column(String, primary_key=True, default=lambda: uuid4().hex)
+    user_id = Column(Integer, nullable=True, index=True)
     status = Column(String, default="started")  # started, ocr_done, nfc_done, liveness_done, completed, failed
     document_type = Column(String, nullable=False)  # new_id, passport, foreign_id, blue_card
     client_reference = Column(String, nullable=True)
+    client_ip = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

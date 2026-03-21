@@ -1,5 +1,7 @@
 import re
+import time
 import logging
+import concurrent.futures
 import cv2
 import numpy as np
 
@@ -9,8 +11,15 @@ _original_parse = _paddle_common_args.parse_common_args
 _paddle_common_args.parse_common_args = lambda k: _original_parse({x: k[x] for x in k if x != "show_log"})
 
 from paddleocr import PaddleOCR  # noqa: E402
+from app.core.request_context import get_log_context
 
 logging.getLogger("ppocr").setLevel(logging.ERROR)
+
+biz_logger = logging.getLogger("signlab.ocr")
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024   # 10 MB
+MAX_IMAGE_DIMENSION = 4096            # px
+OCR_TIMEOUT_SECONDS = 30
 
 # Singleton — model is loaded only once
 _ocr = None
@@ -24,14 +33,26 @@ def get_ocr() -> PaddleOCR:
 
 
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise ValueError(f"Image too large ({len(image_bytes)} bytes). Max: {MAX_IMAGE_BYTES} bytes.")
+
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise ValueError("Image could not be decoded. The file may be corrupt or not a valid image.")
 
     # Upscale if too small
     h, w = img.shape[:2]
     if w < 800:
         scale = 800 / w
         img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+
+    # Cap dimensions to prevent memory issues
+    h, w = img.shape[:2]
+    if max(h, w) > MAX_IMAGE_DIMENSION:
+        scale = MAX_IMAGE_DIMENSION / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
     # Noise reduction
     img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
@@ -45,9 +66,19 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     return img
 
 
+_ocr_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
 def run_ocr(img: np.ndarray) -> list[str]:
     ocr = get_ocr()
-    result = ocr.predict(img)
+
+    future = _ocr_executor.submit(ocr.predict, img)
+    try:
+        result = future.result(timeout=OCR_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError:
+        biz_logger.error("OCR timed out after %s seconds", OCR_TIMEOUT_SECONDS)
+        raise TimeoutError(f"OCR processing timed out after {OCR_TIMEOUT_SECONDS} seconds.")
+
     texts = []
     for res in result:
         for text, score in zip(res.get("rec_texts", []), res.get("rec_scores", [])):
@@ -374,15 +405,55 @@ _BACK_PARSERS = {
 
 def extract_document(image_bytes: bytes, document_type: str, side: str = "front") -> tuple[dict, list]:
     """Full pipeline: preprocess → OCR → parse.  Returns (extracted_data, raw_texts)."""
+    start = time.time()
     img = preprocess_image(image_bytes)
     texts = run_ocr(img)
+
+    biz_logger.info(
+        "OCR completed",
+        extra={
+            **get_log_context(),
+            "document_type": document_type,
+            "side": side,
+            "ocr_text_count": len(texts),
+            "step": "ocr",
+        },
+    )
 
     if side == "back":
         parser = _BACK_PARSERS.get(document_type)
         if parser is None:
-            # For passport/foreign_id/blue_card the back side uses the front parser
             parser = _FRONT_PARSERS.get(document_type, parse_turkish_id)
     else:
         parser = _FRONT_PARSERS.get(document_type, parse_turkish_id)
 
-    return parser(texts), texts
+    try:
+        extracted = parser(texts)
+    except Exception as exc:
+        biz_logger.error(
+            "Document parsing failed",
+            extra={
+                **get_log_context(),
+                "document_type": document_type,
+                "side": side,
+                "error": str(exc),
+                "step": "ocr_parse",
+            },
+        )
+        raise
+
+    duration_ms = round((time.time() - start) * 1000, 2)
+    filled = [k for k, v in extracted.items() if v is not None]
+    biz_logger.info(
+        "Document extraction finished",
+        extra={
+            **get_log_context(),
+            "document_type": document_type,
+            "side": side,
+            "extracted_fields": filled,
+            "duration_ms": duration_ms,
+            "step": "ocr_extract",
+        },
+    )
+
+    return extracted, texts

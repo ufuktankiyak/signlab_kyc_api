@@ -10,11 +10,14 @@ from app.services import audit_service
 
 
 def create_transaction(
-    db: Session, document_type: str, client_reference: str | None, actor_id: int | None = None,
+    db: Session, document_type: str, client_reference: str | None,
+    actor_id: int | None = None, client_ip: str | None = None,
 ) -> KycTransaction:
     tx = KycTransaction(
         document_type=document_type,
         client_reference=client_reference,
+        user_id=actor_id,
+        client_ip=client_ip,
         status="started",
     )
     db.add(tx)
