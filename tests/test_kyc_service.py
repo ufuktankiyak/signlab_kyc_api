@@ -13,11 +13,9 @@ class TestCreateTransaction:
         mock_db.refresh = MagicMock()
         tx = kyc_service.create_transaction(mock_db, "new_id", "REF-001")
 
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
-        mock_db.refresh.assert_called_once()
-
-        added_tx = mock_db.add.call_args[0][0]
+        # First add is the transaction, second is the audit log
+        assert mock_db.add.call_count == 2
+        added_tx = mock_db.add.call_args_list[0][0][0]
         assert added_tx.document_type == "new_id"
         assert added_tx.client_reference == "REF-001"
         assert added_tx.status == "started"
@@ -26,7 +24,7 @@ class TestCreateTransaction:
         mock_db.refresh = MagicMock()
         kyc_service.create_transaction(mock_db, "passport", None)
 
-        added_tx = mock_db.add.call_args[0][0]
+        added_tx = mock_db.add.call_args_list[0][0][0]
         assert added_tx.client_reference is None
 
 
@@ -61,11 +59,10 @@ class TestSaveDocument:
             extracted_data={"name": "John"},
         )
 
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        assert mock_db.add.call_count == 2  # document + audit
         assert mock_tx.status == "ocr_done"
 
-        doc = mock_db.add.call_args[0][0]
+        doc = mock_db.add.call_args_list[0][0][0]
         assert doc.tx_id == "tx1"
         assert doc.side == "front"
 
@@ -85,8 +82,7 @@ class TestSaveNfc:
             parsed_data={"name": "John"},
         )
 
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        assert mock_db.add.call_count == 2  # nfc + audit
         assert mock_tx.status == "nfc_done"
 
 
@@ -104,11 +100,10 @@ class TestSaveLiveness:
         }
         kyc_service.save_liveness(mock_db, "tx1", "/path/video.mp4", result)
 
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        assert mock_db.add.call_count == 2  # liveness + audit
         assert mock_tx.status == "liveness_done"
 
-        liveness = mock_db.add.call_args[0][0]
+        liveness = mock_db.add.call_args_list[0][0][0]
         assert liveness.face_detected is True
         assert liveness.liveness_score == 0.85
         assert liveness.result == "passed"

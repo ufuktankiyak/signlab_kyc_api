@@ -6,9 +6,12 @@ Handles database interactions for all KYC steps.
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.kyc import KycTransaction, KycDocument, KycNfc, KycLiveness
+from app.services import audit_service
 
 
-def create_transaction(db: Session, document_type: str, client_reference: str | None) -> KycTransaction:
+def create_transaction(
+    db: Session, document_type: str, client_reference: str | None, actor_id: int | None = None,
+) -> KycTransaction:
     tx = KycTransaction(
         document_type=document_type,
         client_reference=client_reference,
@@ -17,6 +20,14 @@ def create_transaction(db: Session, document_type: str, client_reference: str | 
     db.add(tx)
     db.commit()
     db.refresh(tx)
+
+    audit_service.log_event(
+        db, "kyc.started",
+        actor_id=actor_id,
+        resource_type="kyc_transaction",
+        resource_id=tx.id,
+        detail={"document_type": document_type},
+    )
     return tx
 
 
@@ -34,6 +45,7 @@ def save_document(
     file_path: str | None,
     raw_ocr: list,
     extracted_data: dict,
+    actor_id: int | None = None,
 ) -> KycDocument:
     doc = KycDocument(
         tx_id=tx_id,
@@ -51,10 +63,21 @@ def save_document(
 
     db.commit()
     db.refresh(doc)
+
+    audit_service.log_event(
+        db, "kyc.ocr_done",
+        actor_id=actor_id,
+        resource_type="kyc_transaction",
+        resource_id=tx_id,
+        detail={"side": side},
+    )
     return doc
 
 
-def save_nfc(db: Session, tx_id: str, mrz_line1, mrz_line2, mrz_line3, parsed_data: dict) -> KycNfc:
+def save_nfc(
+    db: Session, tx_id: str, mrz_line1, mrz_line2, mrz_line3, parsed_data: dict,
+    actor_id: int | None = None,
+) -> KycNfc:
     nfc = KycNfc(
         tx_id=tx_id,
         mrz_line1=mrz_line1,
@@ -70,10 +93,20 @@ def save_nfc(db: Session, tx_id: str, mrz_line1, mrz_line2, mrz_line3, parsed_da
 
     db.commit()
     db.refresh(nfc)
+
+    audit_service.log_event(
+        db, "kyc.nfc_done",
+        actor_id=actor_id,
+        resource_type="kyc_transaction",
+        resource_id=tx_id,
+    )
     return nfc
 
 
-def save_liveness(db: Session, tx_id: str, file_path: str | None, result: dict) -> KycLiveness:
+def save_liveness(
+    db: Session, tx_id: str, file_path: str | None, result: dict,
+    actor_id: int | None = None,
+) -> KycLiveness:
     liveness = KycLiveness(
         tx_id=tx_id,
         file_path=file_path,
@@ -90,6 +123,14 @@ def save_liveness(db: Session, tx_id: str, file_path: str | None, result: dict) 
 
     db.commit()
     db.refresh(liveness)
+
+    audit_service.log_event(
+        db, "kyc.liveness_done",
+        actor_id=actor_id,
+        resource_type="kyc_transaction",
+        resource_id=tx_id,
+        detail={"result": result.get("result")},
+    )
     return liveness
 
 

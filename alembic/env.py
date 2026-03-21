@@ -7,6 +7,7 @@ from alembic import context
 from app.db.base import Base
 from app.models.user import User  # noqa: F401
 import app.models.kyc  # noqa: F401
+import app.models.audit_log  # noqa: F401
 
 config = context.config
 
