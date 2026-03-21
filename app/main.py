@@ -10,7 +10,13 @@ from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.models.user import User
 
 settings = get_settings()
-setup_logging(settings.ENV, settings.LOG_LEVEL)
+setup_logging(
+    settings.ENV,
+    settings.LOG_LEVEL,
+    es_url=settings.ELASTICSEARCH_URL,
+    es_index=settings.ELASTICSEARCH_INDEX,
+    es_enabled=settings.ELASTICSEARCH_ENABLED,
+)
 
 logger = logging.getLogger(__name__)
 

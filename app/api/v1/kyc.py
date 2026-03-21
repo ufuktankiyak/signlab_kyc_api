@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.request_context import user_id_var, tx_id_var, client_ip_var
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.kyc import (
@@ -34,7 +35,13 @@ def start_kyc(
     Starts a new KYC transaction and returns a unique **tx_id**.
     Pass this tx_id to all subsequent steps.
     """
-    tx = kyc_service.create_transaction(db, body.document_type.value, body.client_reference, actor_id=current_user.id)
+    user_id_var.set(current_user.id)
+    tx = kyc_service.create_transaction(
+        db, body.document_type.value, body.client_reference,
+        actor_id=current_user.id,
+        client_ip=client_ip_var.get(),
+    )
+    tx_id_var.set(tx.id)
     return KycStartResponse(
         tx_id=tx.id,
         status=tx.status,
@@ -64,11 +71,18 @@ async def document_ocr(
             detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}",
         )
 
+    # Set context vars for downstream logging
+    user_id_var.set(current_user.id)
+    tx_id_var.set(tx_id)
+
     tx = kyc_service.get_transaction(db, tx_id)
     image_bytes = await file.read()
 
     # Extract data
-    extracted_data, raw_ocr = extract_document(image_bytes, tx.document_type, side)
+    try:
+        extracted_data, raw_ocr = extract_document(image_bytes, tx.document_type, side)
+    except (ValueError, TimeoutError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     # Save file to storage
     file_path = storage_service.save_file(
@@ -111,6 +125,9 @@ def submit_nfc(
     Submit MRZ lines read from NFC chip or document scan.
     Supports TD3 (passport, 2×44) and TD1 (ID card, 3×30).
     """
+    user_id_var.set(current_user.id)
+    tx_id_var.set(tx_id)
+
     kyc_service.get_transaction(db, tx_id)  # validate tx exists
 
     parsed = parse_mrz(body.mrz_line1, body.mrz_line2, body.mrz_line3)
@@ -147,6 +164,9 @@ async def liveness_check(
             status_code=400,
             detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_VIDEO_TYPES)}",
         )
+
+    user_id_var.set(current_user.id)
+    tx_id_var.set(tx_id)
 
     kyc_service.get_transaction(db, tx_id)
     video_bytes = await file.read()

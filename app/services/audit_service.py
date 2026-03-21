@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
+from app.core.request_context import get_log_context
 
 logger = logging.getLogger("signlab.audit")
 
@@ -31,11 +32,11 @@ def log_event(
     logger.info(
         "audit event",
         extra={
+            **get_log_context(),
             "event_type": event_type,
             "actor_id": actor_id,
             "actor_email": actor_email,
             "resource_type": resource_type,
             "resource_id": resource_id,
-            "request_id": request_id,
         },
     )
