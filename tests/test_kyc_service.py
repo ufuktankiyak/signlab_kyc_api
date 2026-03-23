@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from fastapi import HTTPException
 
+from app.core.exceptions import NotFoundException
 from app.models.kyc import KycTransaction, KycDocument, KycNfc, KycLiveness
 from app.services import kyc_service
 
@@ -39,7 +39,7 @@ class TestGetTransaction:
     def test_raises_404_when_not_found(self, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundException) as exc_info:
             kyc_service.get_transaction(mock_db, "nonexistent")
         assert exc_info.value.status_code == 404
 

@@ -1,8 +1,8 @@
 """Repository-level tests for KYC service — real in-memory SQLite DB."""
 
 import pytest
-from fastapi import HTTPException
 
+from app.core.exceptions import NotFoundException
 from app.models.kyc import KycTransaction, KycDocument, KycNfc, KycLiveness
 from app.services import kyc_service
 
@@ -43,14 +43,14 @@ class TestGetTransactionRepo:
         assert result.document_type == "new_id"
 
     def test_raises_404_for_missing(self, db_session):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundException) as exc_info:
             kyc_service.get_transaction(db_session, "nonexistent-id")
         assert exc_info.value.status_code == 404
 
     def test_404_message_includes_tx_id(self, db_session):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundException) as exc_info:
             kyc_service.get_transaction(db_session, "abc123")
-        assert "abc123" in exc_info.value.detail
+        assert "abc123" in exc_info.value.message
 
 
 # ─── save_document ───────────────────────────────────────────────────────────

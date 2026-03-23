@@ -10,6 +10,8 @@ Supports:
 import re
 from typing import Optional
 
+from app.core.exceptions import ValidationException, ErrorCode
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +46,11 @@ def _sex(raw: str) -> str:
 def _parse_td3(line1: str, line2: str) -> dict:
     l1, l2 = _clean(line1), _clean(line2)
     if len(l1) < 44 or len(l2) < 44:
-        return {"error": "TD3 lines must be 44 chars each"}
+        raise ValidationException(
+            code=ErrorCode.INVALID_MRZ,
+            message="TD3 lines must be 44 chars each",
+            details={"line1_len": len(l1), "line2_len": len(l2)},
+        )
 
     doc_type = l1[0:2].replace("<", "").strip()
     issuing_country = l1[2:5].replace("<", "").strip()
@@ -77,7 +83,11 @@ def _parse_td3(line1: str, line2: str) -> dict:
 def _parse_td1(line1: str, line2: str, line3: str) -> dict:
     l1, l2, l3 = _clean(line1), _clean(line2), _clean(line3)
     if len(l1) < 30 or len(l2) < 30 or len(l3) < 30:
-        return {"error": "TD1 lines must be 30 chars each"}
+        raise ValidationException(
+            code=ErrorCode.INVALID_MRZ,
+            message="TD1 lines must be 30 chars each",
+            details={"line1_len": len(l1), "line2_len": len(l2), "line3_len": len(l3)},
+        )
 
     doc_type = l1[0:2].replace("<", "").strip()
     issuing_country = l1[2:5].replace("<", "").strip()
@@ -120,7 +130,10 @@ def parse_mrz(
     Returns a dict with parsed fields or {"error": "..."} on failure.
     """
     if not line1 or not line2:
-        return {"error": "At least line1 and line2 are required"}
+        raise ValidationException(
+            code=ErrorCode.INVALID_MRZ,
+            message="At least line1 and line2 are required",
+        )
 
     l1 = _clean(line1)
     l2 = _clean(line2)
@@ -139,4 +152,8 @@ def parse_mrz(
     if len(l1) >= 44 and len(l2) >= 44:
         return _parse_td3(l1, l2)
 
-    return {"error": f"Could not determine MRZ type from line lengths ({len(l1)}, {len(l2)})"}
+    raise ValidationException(
+        code=ErrorCode.INVALID_MRZ,
+        message=f"Could not determine MRZ type from line lengths ({len(l1)}, {len(l2)})",
+        details={"line1_len": len(l1), "line2_len": len(l2)},
+    )

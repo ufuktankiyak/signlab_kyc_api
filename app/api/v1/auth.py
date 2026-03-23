@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.exceptions import AppException, AuthException, ErrorCode
 from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user
 from app.db.session import get_db
@@ -20,7 +21,11 @@ _settings = get_settings()
 @limiter.limit(_settings.RATE_LIMIT_AUTH)
 def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(status_code=409, detail="Email already registered")
+        raise AppException(
+            code=ErrorCode.EMAIL_ALREADY_EXISTS,
+            message="Email already registered",
+            status_code=409,
+        )
     user = User(
         email=body.email,
         password_hash=hash_password(body.password),
@@ -50,9 +55,9 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
             actor_email=body.email,
             detail={"reason": "invalid_credentials"},
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+        raise AuthException(
+            code=ErrorCode.INVALID_CREDENTIALS,
+            message="Invalid email or password",
         )
     if not user.is_active:
         audit_service.log_event(
@@ -61,7 +66,11 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
             actor_email=user.email,
             detail={"reason": "account_deactivated"},
         )
-        raise HTTPException(status_code=403, detail="Account is deactivated")
+        raise AuthException(
+            code=ErrorCode.ACCOUNT_DEACTIVATED,
+            message="Account is deactivated",
+            status_code=403,
+        )
 
     token = create_access_token(user.id, user.role)
 

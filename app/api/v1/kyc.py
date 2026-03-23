@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.exceptions import ValidationException, FileTooLargeException, ProcessingException, ErrorCode
+from app.core.file_validation import validate_image_bytes, validate_video_bytes
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.core.request_context import user_id_var, tx_id_var, client_ip_var
@@ -21,9 +23,6 @@ from app.services.liveness_service import check_liveness
 
 router = APIRouter()
 _settings = get_settings()
-
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/mpeg"}
 
 
 # ─── 1. Start ─────────────────────────────────────────────────────────────────
@@ -72,12 +71,6 @@ async def document_ocr(
     Upload a document image (front or back). Runs OCR and extracts structured data.
     Supported types: new_id, passport, foreign_id, blue_card.
     """
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}",
-        )
-
     # Set context vars for downstream logging
     user_id_var.set(current_user.id)
     tx_id_var.set(tx_id)
@@ -86,16 +79,23 @@ async def document_ocr(
     image_bytes = await file.read()
 
     if len(image_bytes) > _settings.MAX_IMAGE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Image too large. Max: {_settings.MAX_IMAGE_SIZE // (1024 * 1024)} MB.",
+        raise FileTooLargeException(
+            message=f"Image too large. Max: {_settings.MAX_IMAGE_SIZE // (1024 * 1024)} MB.",
+        )
+
+    if validate_image_bytes(image_bytes) is None:
+        raise ValidationException(
+            code=ErrorCode.INVALID_FILE_CONTENT,
+            message="File content is not a valid image. Accepted: JPEG, PNG, WebP, GIF.",
         )
 
     # Extract data
     try:
         extracted_data, raw_ocr = extract_document(image_bytes, tx.document_type, side)
-    except (ValueError, TimeoutError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    except TimeoutError as exc:
+        raise ProcessingException(code=ErrorCode.OCR_TIMEOUT, message=str(exc))
+    except ValueError as exc:
+        raise ProcessingException(code=ErrorCode.OCR_FAILED, message=str(exc))
 
     # Save file to storage
     file_path = storage_service.save_file(
@@ -176,12 +176,6 @@ async def liveness_check(
     Multiple frames are sampled from the video and face detection is performed on each.
     Result: passed | review | failed.
     """
-    if file.content_type not in ALLOWED_VIDEO_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_VIDEO_TYPES)}",
-        )
-
     user_id_var.set(current_user.id)
     tx_id_var.set(tx_id)
 
@@ -189,9 +183,14 @@ async def liveness_check(
     video_bytes = await file.read()
 
     if len(video_bytes) > _settings.MAX_VIDEO_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Video too large. Max: {_settings.MAX_VIDEO_SIZE // (1024 * 1024)} MB.",
+        raise FileTooLargeException(
+            message=f"Video too large. Max: {_settings.MAX_VIDEO_SIZE // (1024 * 1024)} MB.",
+        )
+
+    if validate_video_bytes(video_bytes) is None:
+        raise ValidationException(
+            code=ErrorCode.INVALID_FILE_CONTENT,
+            message="File content is not a valid video. Accepted: MP4, WebM, MOV.",
         )
 
     result = check_liveness(video_bytes)
