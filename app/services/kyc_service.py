@@ -4,7 +4,7 @@ Handles database interactions for all KYC steps.
 """
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from app.core.exceptions import NotFoundException, ErrorCode
 from app.models.kyc import KycTransaction, KycDocument, KycNfc, KycLiveness
 from app.services import audit_service
 
@@ -37,7 +37,11 @@ def create_transaction(
 def get_transaction(db: Session, tx_id: str) -> KycTransaction:
     tx = db.query(KycTransaction).filter(KycTransaction.id == tx_id).first()
     if not tx:
-        raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
+        raise NotFoundException(
+            code=ErrorCode.TRANSACTION_NOT_FOUND,
+            message=f"Transaction {tx_id} not found",
+            details={"tx_id": tx_id},
+        )
     return tx
 
 

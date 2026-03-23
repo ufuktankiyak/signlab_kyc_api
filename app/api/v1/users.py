@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from app.core.exceptions import NotFoundException, ErrorCode
 from app.core.security import require_role
 from app.models.user import User
 from app.schemas.user import UserResponse
@@ -17,5 +18,9 @@ async def get_user(
 ):
     user = get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise NotFoundException(
+            code=ErrorCode.USER_NOT_FOUND,
+            message=f"User {user_id} not found",
+            details={"user_id": user_id},
+        )
     return user

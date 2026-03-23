@@ -4,8 +4,8 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
 from jose import jwt
-from fastapi import HTTPException
 
+from app.core.exceptions import AppException, AuthException
 from app.core.security import (
     hash_password,
     verify_password,
@@ -113,7 +113,7 @@ class TestGetCurrentUser:
         credentials.credentials = token
         mock_db = MagicMock()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             get_current_user(credentials=credentials, db=mock_db)
         assert exc_info.value.status_code == 401
 
@@ -125,7 +125,7 @@ class TestGetCurrentUser:
         credentials.credentials = "not.a.valid.token"
         mock_db = MagicMock()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             get_current_user(credentials=credentials, db=mock_db)
         assert exc_info.value.status_code == 401
 
@@ -145,9 +145,9 @@ class TestGetCurrentUser:
         credentials = MagicMock()
         credentials.credentials = token
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             get_current_user(credentials=credentials, db=mock_db)
-        assert exc_info.value.status_code == 401
+        assert exc_info.value.status_code == 403
 
     @patch("app.core.security.settings")
     def test_user_not_found_raises_401(self, mock_settings):
@@ -162,7 +162,7 @@ class TestGetCurrentUser:
         credentials = MagicMock()
         credentials.credentials = token
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             get_current_user(credentials=credentials, db=mock_db)
         assert exc_info.value.status_code == 401
 
@@ -180,7 +180,7 @@ class TestGetCurrentUser:
         credentials.credentials = token
         mock_db = MagicMock()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             get_current_user(credentials=credentials, db=mock_db)
         assert exc_info.value.status_code == 401
 
@@ -201,6 +201,6 @@ class TestRequireRole:
         mock_user = MagicMock()
         mock_user.role = "viewer"
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AuthException) as exc_info:
             checker(current_user=mock_user)
         assert exc_info.value.status_code == 403

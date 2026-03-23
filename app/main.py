@@ -1,12 +1,18 @@
 import logging
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from slowapi import _rate_limit_exceeded_handler
+from fastapi.exceptions import RequestValidationError
 from slowapi.errors import RateLimitExceeded
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.exception_handlers import (
+    app_exception_handler,
+    validation_exception_handler,
+    rate_limit_handler,
+    unhandled_exception_handler,
+)
+from app.core.exceptions import AppException
 from app.core.logging import setup_logging
 from app.core.rate_limit import limiter
 from app.core.security import hash_password
@@ -33,7 +39,12 @@ app = FastAPI(
 
 # Rate limiting
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Exception handlers (order matters — most specific first)
+app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(api_router, prefix="/api/v1")

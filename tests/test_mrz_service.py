@@ -1,6 +1,7 @@
 """Tests for MRZ (Machine Readable Zone) parser."""
 
 import pytest
+from app.core.exceptions import ValidationException
 from app.services.mrz_service import parse_mrz, _mrz_date, _decode_name, _sex, _clean
 
 
@@ -94,8 +95,8 @@ class TestParseTD3:
         assert result["expiry_date"] == "31.12.2025"
 
     def test_short_lines_error(self):
-        result = parse_mrz("SHORT", "LINES")
-        assert "error" in result
+        with pytest.raises(ValidationException):
+            parse_mrz("SHORT", "LINES")
 
 
 # ─── TD1 ID Card ─────────────────────────────────────────────────────────────
@@ -125,21 +126,22 @@ class TestParseTD1:
         assert result["first_name"] == "JOHN"
 
     def test_short_lines_error(self):
-        result = parse_mrz("SHORT", "LINES", "TOO")
-        assert "error" in result
+        with pytest.raises(ValidationException):
+            parse_mrz("SHORT", "LINES", "TOO")
 
 
 # ─── Edge cases ──────────────────────────────────────────────────────────────
 
 class TestParseMrzEdgeCases:
     def test_missing_lines(self):
-        result = parse_mrz(None, None)
-        assert result["error"] == "At least line1 and line2 are required"
+        with pytest.raises(ValidationException) as exc_info:
+            parse_mrz(None, None)
+        assert "line1 and line2" in exc_info.value.message
 
     def test_empty_line1(self):
-        result = parse_mrz("", "something")
-        assert "error" in result
+        with pytest.raises(ValidationException):
+            parse_mrz("", "something")
 
     def test_unrecognized_format(self):
-        result = parse_mrz("ABCDEF", "123456")
-        assert "error" in result
+        with pytest.raises(ValidationException):
+            parse_mrz("ABCDEF", "123456")
