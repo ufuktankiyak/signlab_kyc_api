@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+import re
+
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any
 from datetime import datetime
 from enum import Enum
@@ -11,11 +13,23 @@ class DocumentType(str, Enum):
     blue_card = "blue_card"
 
 
+def _sanitize(v: str | None) -> str | None:
+    """Strip whitespace and collapse internal whitespace for string inputs."""
+    if v is None:
+        return None
+    return re.sub(r"\s+", " ", v.strip())
+
+
 # ─── Start ────────────────────────────────────────────────────────────────────
 
 class KycStartRequest(BaseModel):
     document_type: DocumentType
-    client_reference: Optional[str] = None
+    client_reference: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("client_reference")
+    @classmethod
+    def sanitize_client_reference(cls, v: str | None) -> str | None:
+        return _sanitize(v)
 
 
 class KycStartResponse(BaseModel):
@@ -39,9 +53,16 @@ class OcrResponse(BaseModel):
 # ─── NFC / MRZ ────────────────────────────────────────────────────────────────
 
 class NfcRequest(BaseModel):
-    mrz_line1: Optional[str] = None
-    mrz_line2: Optional[str] = None
-    mrz_line3: Optional[str] = None
+    mrz_line1: Optional[str] = Field(None, max_length=50)
+    mrz_line2: Optional[str] = Field(None, max_length=50)
+    mrz_line3: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("mrz_line1", "mrz_line2", "mrz_line3")
+    @classmethod
+    def sanitize_mrz(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip()
 
 
 class NfcResponse(BaseModel):
