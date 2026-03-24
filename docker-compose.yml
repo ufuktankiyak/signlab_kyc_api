@@ -15,24 +15,37 @@ services:
     restart: unless-stopped
 
   api:
-    build: .
+    build:
+      context: ../signlab_kyc_dotnet
+      dockerfile: SignlabKyc.Api/Dockerfile
     container_name: signlab_kyc_api
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "8000:8080"
     environment:
-      DATABASE_URL: postgresql://signlab:signlab123@db:5432/signlab_kyc
-      STORAGE_PATH: /app/storage
-      ELASTICSEARCH_URL: http://elasticsearch:9200
-      ELASTICSEARCH_INDEX: signlab-business-logs
-      ELASTICSEARCH_ENABLED: "true"
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=signlab_kyc;Username=signlab;Password=signlab123"
+      Jwt__SecretKey: "${SECRET_KEY:-supersecretkey123456789abcdef0123456789abcdef}"
+      Jwt__AccessTokenExpireMinutes: "60"
+      PythonService__BaseUrl: "http://ocr-service:5001"
+      PythonService__TimeoutSeconds: "35"
+      Storage__Path: "/app/storage"
+      Serilog__WriteTo__1__Name: "Elasticsearch"
+      Serilog__WriteTo__1__Args__nodeUris: "http://elasticsearch:9200"
+      ASPNETCORE_ENVIRONMENT: "Production"
     volumes:
-      - .:/app
       - kyc_storage:/app/storage
     depends_on:
       - db
+      - ocr-service
       - elasticsearch
+    restart: unless-stopped
+
+  ocr-service:
+    build: .
+    container_name: signlab_ocr_service
+    expose:
+      - "5001"
+    environment:
+      OCR_PORT: "5001"
     restart: unless-stopped
 
   elasticsearch:
