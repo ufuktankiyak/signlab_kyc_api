@@ -24,8 +24,8 @@ RUN python -c "import paddleocr._common_args as c; _o=c.parse_common_args; c.par
 # Proje files
 COPY . .
 
-# FastAPI port
-EXPOSE 8000
+# OCR service port
+EXPOSE 5001
 
-# Run with uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with uvicorn — OCR internal service
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5001"]

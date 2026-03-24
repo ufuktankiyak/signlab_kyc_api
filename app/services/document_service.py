@@ -11,7 +11,8 @@ _original_parse = _paddle_common_args.parse_common_args
 _paddle_common_args.parse_common_args = lambda k: _original_parse({x: k[x] for x in k if x != "show_log"})
 
 from paddleocr import PaddleOCR  # noqa: E402
-from app.core.request_context import get_log_context
+def get_log_context() -> dict:
+    return {}
 
 logging.getLogger("ppocr").setLevel(logging.ERROR)
 
