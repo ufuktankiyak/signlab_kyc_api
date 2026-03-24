@@ -1,72 +1,68 @@
+"""
+Signlab OCR & Liveness — Internal Microservice
+
+Minimal FastAPI service exposing only two endpoints:
+  POST /ocr       — document OCR extraction
+  POST /liveness  — video liveness detection
+  GET  /health    — health check
+
+No auth, no DB, no rate limiting. Called only by the .NET API over internal network.
+"""
+
 import logging
 
-from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
-from slowapi.errors import RateLimitExceeded
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 
-from app.api.v1.router import api_router
-from app.core.config import get_settings
-from app.core.exception_handlers import (
-    app_exception_handler,
-    validation_exception_handler,
-    rate_limit_handler,
-    unhandled_exception_handler,
-)
-from app.core.exceptions import AppException
-from app.core.logging import setup_logging
-from app.core.rate_limit import limiter
-from app.core.security import hash_password
-from app.db.session import SessionLocal
-from app.middleware.logging_middleware import RequestLoggingMiddleware
-from app.models.user import User
+from app.services.document_service import extract_document
+from app.services.liveness_service import check_liveness
 
-settings = get_settings()
-setup_logging(
-    settings.ENV,
-    settings.LOG_LEVEL,
-    es_url=settings.ELASTICSEARCH_URL,
-    es_index=settings.ELASTICSEARCH_INDEX,
-    es_enabled=settings.ELASTICSEARCH_ENABLED,
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logger = logging.getLogger("signlab.ocr-service")
 
-logger = logging.getLogger(__name__)
-
-app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    debug=settings.DEBUG
-)
-
-# Rate limiting
-app.state.limiter = limiter
-
-# Exception handlers (order matters — most specific first)
-app.add_exception_handler(AppException, app_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
-app.add_exception_handler(Exception, unhandled_exception_handler)
-
-app.add_middleware(RequestLoggingMiddleware)
-app.include_router(api_router, prefix="/api/v1")
+app = FastAPI(title="Signlab OCR Service", version="1.0.0", docs_url=None, redoc_url=None)
 
 
-@app.get("/health", tags=["Health"])
+@app.get("/health")
 def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    return {"status": "ok", "service": "ocr"}
 
 
-@app.on_event("startup")
-def startup():
-    logger.info("Application starting", extra={"env": settings.ENV})
-    db = SessionLocal()
+@app.post("/ocr")
+async def ocr(
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    side: str = Form("front"),
+):
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail={"error": "Empty file", "code": "OCR_FAILED"})
+
     try:
-        if not db.query(User).filter(User.email == "admin@signlab.com").first():
-            db.add(User(
-                email="admin@signlab.com",
-                password_hash=hash_password("changeme123"),
-                role="admin",
-            ))
-            db.commit()
-            logger.info("Admin seed user created")
-    finally:
-        db.close()
+        extracted_data, raw_ocr = extract_document(image_bytes, document_type, side)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e), "code": "OCR_FAILED"})
+    except TimeoutError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e), "code": "OCR_FAILED"})
+    except Exception:
+        logger.exception("OCR extraction failed")
+        raise HTTPException(status_code=500, detail={"error": "Internal OCR error", "code": "OCR_FAILED"})
+
+    return {
+        "extracted_data": extracted_data,
+        "raw_ocr": raw_ocr,
+    }
+
+
+@app.post("/liveness")
+async def liveness(file: UploadFile = File(...)):
+    video_bytes = await file.read()
+    if not video_bytes:
+        raise HTTPException(status_code=422, detail={"error": "Empty file", "code": "LIVENESS_FAILED"})
+
+    try:
+        result = check_liveness(video_bytes)
+    except Exception:
+        logger.exception("Liveness check failed")
+        raise HTTPException(status_code=500, detail={"error": "Internal liveness error", "code": "LIVENESS_FAILED"})
+
+    return result

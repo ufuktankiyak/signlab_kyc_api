@@ -17,7 +17,8 @@ import numpy as np
 import tempfile
 import os
 
-from app.core.request_context import get_log_context
+def get_log_context() -> dict:
+    return {}
 
 biz_logger = logging.getLogger("signlab.liveness")
 
