@@ -5,3 +5,5 @@ paddlepaddle
 paddleocr
 opencv-python-headless
 numpy
+insightface
+onnxruntime

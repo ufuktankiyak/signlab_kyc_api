@@ -21,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download PaddleOCR models at build time (no internet access required at runtime)
 RUN python -c "import paddleocr._common_args as c; _o=c.parse_common_args; c.parse_common_args=lambda k: _o({x:k[x] for x in k if x!='show_log'}); from paddleocr import PaddleOCR; PaddleOCR(lang='en')"
 
+# Download InsightFace buffalo_l model at build time
+RUN python -c "from insightface.app import FaceAnalysis; app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); app.prepare(ctx_id=0, det_size=(640,640))"
+
 # Proje files
 COPY . .
 
