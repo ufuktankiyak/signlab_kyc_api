@@ -23,14 +23,14 @@ services:
       - "8000:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=signlab_kyc;Username=signlab;Password=signlab123"
-      Jwt__SecretKey: "${SECRET_KEY:-supersecretkey123456789abcdef0123456789abcdef}"
+      Jwt__SecretKey: "${SECRET_KEY:-supersecretkey123456789abcdef0123456789abcdef01234567}"
       Jwt__AccessTokenExpireMinutes: "60"
       PythonService__BaseUrl: "http://ocr-service:5001"
       PythonService__TimeoutSeconds: "35"
       Storage__Path: "/app/storage"
       Serilog__WriteTo__1__Name: "Elasticsearch"
       Serilog__WriteTo__1__Args__nodeUris: "http://elasticsearch:9200"
-      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_ENVIRONMENT: "Development"
     volumes:
       - kyc_storage:/app/storage
     depends_on:
