@@ -5,14 +5,17 @@ import concurrent.futures
 import cv2
 import numpy as np
 
-# PaddleOCR 3.x internal bug fix: 'show_log' is passed to its own base class and gets rejected
-import paddleocr._common_args as _paddle_common_args
-_original_parse = _paddle_common_args.parse_common_args
-_paddle_common_args.parse_common_args = lambda k: _original_parse({x: k[x] for x in k if x != "show_log"})
-
-from paddleocr import PaddleOCR  # noqa: E402
 def get_log_context() -> dict:
     return {}
+
+
+def _import_paddleocr():
+    # PaddleOCR 3.x internal bug fix: 'show_log' is passed to its own base class and gets rejected
+    import paddleocr._common_args as _paddle_common_args
+    _original_parse = _paddle_common_args.parse_common_args
+    _paddle_common_args.parse_common_args = lambda k: _original_parse({x: k[x] for x in k if x != "show_log"})
+    from paddleocr import PaddleOCR
+    return PaddleOCR
 
 logging.getLogger("ppocr").setLevel(logging.ERROR)
 
@@ -26,9 +29,10 @@ OCR_TIMEOUT_SECONDS = 30
 _ocr = None
 
 
-def get_ocr() -> PaddleOCR:
+def get_ocr():
     global _ocr
     if _ocr is None:
+        PaddleOCR = _import_paddleocr()
         _ocr = PaddleOCR(lang="en")
     return _ocr
 
